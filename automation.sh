@@ -54,9 +54,34 @@ bucket=$(aws s3 ls | grep $bucket_name | awk '{print $3}')
 echo -e "Uploading all log tar files to S3 bucket"
 aws s3 sync /tmp/logfiles/ s3://$bucket
 
+#Creating/Checking the inventory file for logs which are moving to S3 bucket"
+if [ -f "/var/www/html/inventory.html" ];
+then
+    echo "inventory is already exists"
+else
+    echo -e "Log Type\tDate Created\t\tType\t\tSize\t\tLog Name" > /var/www/html/inventory.html
+fi
+
+#Updating inventory doc with Log details of the files moved to S3 bucket
+aws s3 ls --human-readable s3://$bucket | tail -n +1 | awk -F'[-" ""."]' '{print $11 "-"  $12 "\t" $13 "-" $14 "\t\t" $17 "\t\t" $7"."$8 $9 "\t\t" $15"-" $16}' >> /var/www/html/inventory.html
+
 #Empyting the logfiles directory as all the files are copied to S3 bucket
 sudo rm -rf /tmp/logfiles/*.tar
 
 #Listing the files uploaded into S3 Bucket
 echo -e "List of Files uploaded in s3 bucket are"
 aws s3 ls s3://$bucket
+
+#Configuring the cronjob for this task
+var1=$(find /etc/cron.d/ -type f -name "automation" -exec grep -l "automation.sh" {} \;)
+var2=$(sudo service cron status | grep running | wc -l)
+
+if [ $var2 == "0" -o "$var1" != "/etc/cron.d/automation" ];
+then
+    echo "* 10 * * *   root   bash  /root/Automation_Project/automation.sh" > /etc/cron.d/automation
+    sudo service cron restart
+    echo "CronJob configured for automation script"
+else
+    echo "CronJob is already running"
+fi
+
